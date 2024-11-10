@@ -1,0 +1,29 @@
+/* Ensure the body fills the entire viewport */
+html,
+body {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#grid {
+    display: grid;
+    width: 100%;
+    height: 100%;
+}
+
+/* Style each grid cell to fill its space */
+.grid-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1em;
+    cursor: pointer;
+    border: 1px solid #555;
+    background: url("./assets/firefly.svg");
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+}
