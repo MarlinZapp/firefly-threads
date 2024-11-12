@@ -4,7 +4,6 @@ import {
   default as wasm,
   setup_fireflies,
   get_grid_row,
-  start,
 } from "./pkg/firefly_rust_wasm.js";
 
 wasm().then((module) => {
@@ -20,10 +19,9 @@ wasm().then((module) => {
   let cells = [[]];
 
   initializeGrid(m, n);
-  start();
 
   // Periodically poll the state and update the grid
-  setInterval(() => renderGrid(m, n), 30); // Update every x ms
+  setInterval(() => renderGrid(m, n), 100); // Update every x ms
 
   /**
    * Function to render a grid of m x n cells
@@ -35,9 +33,9 @@ wasm().then((module) => {
       const row = get_grid_row(i);
       for (let j = 0; j < ncols; j++) {
         if (row[j] === 0) {
-          cells[i][j].style.backgroundColor = "black";
+          cells[i][j].style.backgroundColor = "#14110d";
         } else {
-          cells[i][j].style.backgroundColor = "white";
+          cells[i][j].style.backgroundColor = "#d49d0e";
         }
       }
     }

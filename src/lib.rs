@@ -22,37 +22,33 @@ extern "C" {
 }
 
 static mut GRID_STATE: Option<Vec<Vec<Firefly>>> = None;
+const coupling_strength: f32 = 0.01;
 
 #[derive(Clone, Copy, Debug)]
-enum LightState {
-    On,
-    Off,
+struct State {
+    phase: f32,
+    frequency: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Position {
+    x: usize,
+    y: usize,
 }
 
 #[derive(Debug)]
 struct Firefly {
-    x: usize,
-    y: usize,
-    state: Arc<Mutex<LightState>>,
+    position: Position,
+    state: Arc<Mutex<State>>,
     channel: (Sender<Message>, Arc<Mutex<Receiver<Message>>>),
 }
 
 #[derive(Debug, Clone, Copy)]
 enum Message {
-    Blink,
-}
-
-#[wasm_bindgen]
-pub fn start() {
-    unsafe {
-        if let Some(fireflies) = &GRID_STATE {
-            let (y, x) = (
-                get_random_index(fireflies.len()),
-                get_random_index(fireflies[0].len()),
-            );
-            fireflies[y][x].channel.0.send(Message::Blink).unwrap();
-        }
-    }
+    /** Request from firefly at the given position to send the state information */
+    StateRequest(Position),
+    /** Response from firefly at the given position with the state information */
+    StateResponse(State),
 }
 
 fn get_random_index(n: usize) -> usize {
@@ -71,13 +67,10 @@ pub fn get_grid_row(i: usize) -> Vec<u8> {
             let flies = &fireflies[i];
             for fly in flies {
                 let fly_state = fly.state.lock().unwrap();
-                match *fly_state {
-                    LightState::On => {
-                        row_state.push(1);
-                    }
-                    LightState::Off => {
-                        row_state.push(0);
-                    }
+                if fly_state.phase > std::f32::consts::PI {
+                    row_state.push(1);
+                } else {
+                    row_state.push(0);
                 }
             }
             return row_state;
@@ -91,10 +84,14 @@ impl Firefly {
     fn new(x: usize, y: usize) -> Self {
         let channel = mpsc::channel();
         let channel = (channel.0, Arc::new(Mutex::new(channel.1)));
+        let rand_factor = Math::random() as f32;
+        let state = State {
+            phase: rand_factor * 2.0 * std::f32::consts::PI,
+            frequency: 0.03 + rand_factor * 0.01,
+        };
         let firefly = Firefly {
-            x,
-            y,
-            state: Arc::new(Mutex::new(LightState::Off)),
+            position: Position { x, y },
+            state: Arc::new(Mutex::new(state)),
             channel,
         };
         firefly
@@ -103,48 +100,45 @@ impl Firefly {
     // Method to start firefly's behavior in a separate thread
     fn start(&mut self) {
         let state = Arc::clone(&self.state);
-        let (x, y) = (self.x.clone(), self.y.clone());
-        let receiver = Arc::clone(&self.channel.1);
-        thread::spawn(move || {
-            while let Ok(message) = receiver.lock().unwrap().recv() {
-                match message {
-                    Message::Blink => {
-                        match *state.lock().unwrap() {
-                            LightState::On => {
-                                continue;
-                            }
-                            LightState::Off => {}
-                        }
-                        Firefly::blink(Arc::clone(&state));
-                        thread::sleep(Duration::from_millis(800));
-                        Firefly::inform_neighbours(x, y);
-                    }
+        let position = self.position.clone();
+        let mut neighbors = None;
+        thread::spawn(move || loop {
+            match &neighbors {
+                Some(neighbors) => Firefly::update(&state, &neighbors),
+                None => {
+                    neighbors = Firefly::get_neighbours(position.x, position.y);
                 }
-                // log!(
-                //     "Firefly {},{} is now in state {:?}",
-                //     x,
-                //     y,
-                //     state.lock().unwrap()
-                // );
             }
+            thread::sleep(Duration::from_millis(10));
         });
     }
 
-    fn blink(state: Arc<Mutex<LightState>>) {
+    fn update(state: &Arc<Mutex<State>>, neighbors: &Vec<&Firefly>) {
+        let last_state;
+        {
+            last_state = state.lock().unwrap().clone();
+        }
+        // Update the phase based on natural frequency and coupling with neighbors
+        let neighbor_phase_difference: f32 = neighbors
+            .iter()
+            .map(|n| {
+                let other_state = n.state.lock().unwrap();
+                (other_state.phase - last_state.phase).sin()
+            })
+            .sum();
+        let phase_tick = last_state.frequency
+            + (coupling_strength / neighbors.len() as f32) * neighbor_phase_difference;
+        let total_phase = 2.0 * std::f32::consts::PI;
         {
             let mut state = state.lock().unwrap();
-            *state = LightState::On;
-        }
-        thread::spawn(move || {
-            thread::sleep(Duration::from_secs(1));
-            {
-                let mut state = state.lock().unwrap();
-                *state = LightState::Off;
+            state.phase += phase_tick;
+            if state.phase >= total_phase {
+                state.phase -= total_phase;
             }
-        });
+        }
     }
 
-    fn inform_neighbours(x: usize, y: usize) {
+    fn get_neighbours(x: usize, y: usize) -> Option<Vec<&'static Firefly>> {
         unsafe {
             if let Some(fireflies) = &GRID_STATE {
                 let rows = fireflies.len();
@@ -154,9 +148,9 @@ impl Firefly {
                 let left = &fireflies[y][(x - 1) % cols];
                 let right = &fireflies[y][(x + 1) % cols];
                 let neighbours = vec![up, down, left, right];
-                for neighbour in neighbours {
-                    neighbour.channel.0.send(Message::Blink).unwrap();
-                }
+                return Some(neighbours);
+            } else {
+                None
             }
         }
     }
@@ -172,11 +166,9 @@ pub fn setup_fireflies(rows: usize, cols: usize) {
     for y in 0..rows {
         fireflies.push(Vec::new());
         for x in 0..cols {
-            let mut firefly = Firefly::new(x, y);
-
-            firefly.start();
-
+            let firefly = Firefly::new(x, y);
             fireflies[y].push(firefly);
+            fireflies[y][x].start();
         }
     }
 
