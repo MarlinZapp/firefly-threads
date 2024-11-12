@@ -34,7 +34,7 @@ struct Firefly {
     x: usize,
     y: usize,
     state: Arc<Mutex<LightState>>,
-    channel: Arc<Mutex<(Sender<Message>, Receiver<Message>)>>,
+    channel: (Sender<Message>, Arc<Mutex<Receiver<Message>>>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -50,13 +50,7 @@ pub fn start() {
                 get_random_index(fireflies.len()),
                 get_random_index(fireflies[0].len()),
             );
-            fireflies[y][x]
-                .channel
-                .lock()
-                .unwrap()
-                .0
-                .send(Message::Blink)
-                .unwrap();
+            fireflies[y][x].channel.0.send(Message::Blink).unwrap();
         }
     }
 }
@@ -96,7 +90,7 @@ impl Firefly {
     // Method to create a new firefly
     fn new(x: usize, y: usize) -> Self {
         let channel = mpsc::channel();
-        let channel = Arc::new(Mutex::new(channel));
+        let channel = (channel.0, Arc::new(Mutex::new(channel.1)));
         let firefly = Firefly {
             x,
             y,
@@ -110,22 +104,28 @@ impl Firefly {
     fn start(&mut self) {
         let state = Arc::clone(&self.state);
         let (x, y) = (self.x.clone(), self.y.clone());
-        let channel = Arc::clone(&self.channel);
+        let receiver = Arc::clone(&self.channel.1);
         thread::spawn(move || {
-            while let Ok(message) = channel.lock().unwrap().1.recv() {
-                log!("Test");
+            while let Ok(message) = receiver.lock().unwrap().recv() {
                 match message {
                     Message::Blink => {
+                        match *state.lock().unwrap() {
+                            LightState::On => {
+                                continue;
+                            }
+                            LightState::Off => {}
+                        }
                         Firefly::blink(Arc::clone(&state));
+                        thread::sleep(Duration::from_millis(800));
                         Firefly::inform_neighbours(x, y);
                     }
                 }
-                log!(
-                    "Firefly {},{} is now in state {:?}",
-                    x,
-                    y,
-                    state.lock().unwrap()
-                );
+                // log!(
+                //     "Firefly {},{} is now in state {:?}",
+                //     x,
+                //     y,
+                //     state.lock().unwrap()
+                // );
             }
         });
     }
@@ -155,13 +155,7 @@ impl Firefly {
                 let right = &fireflies[y][(x + 1) % cols];
                 let neighbours = vec![up, down, left, right];
                 for neighbour in neighbours {
-                    neighbour
-                        .channel
-                        .lock()
-                        .unwrap()
-                        .0
-                        .send(Message::Blink)
-                        .unwrap();
+                    neighbour.channel.0.send(Message::Blink).unwrap();
                 }
             }
         }

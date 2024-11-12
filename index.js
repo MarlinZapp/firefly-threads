@@ -23,7 +23,7 @@ wasm().then((module) => {
   start();
 
   // Periodically poll the state and update the grid
-  setInterval(() => renderGrid(m, n), 100); // Update every 100ms
+  setInterval(() => renderGrid(m, n), 30); // Update every x ms
 
   /**
    * Function to render a grid of m x n cells
