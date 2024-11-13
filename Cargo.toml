@@ -1,5 +1,5 @@
 [package]
-name = "firefly-rust-wasm"
+name = "firefly-threads"
 version = "0.1.0"
 authors = ["Marlin Zapp <s4mazapp@uni-trier.de>"]
 edition = "2018"

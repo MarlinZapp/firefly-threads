@@ -4,7 +4,7 @@ import {
   default as wasm,
   setup_fireflies,
   get_grid_row,
-} from "./pkg/firefly_rust_wasm.js";
+} from "./pkg/firefly_threads.js";
 
 wasm().then((module) => {
   // Define number of rows and columns
