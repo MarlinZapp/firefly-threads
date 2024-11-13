@@ -87,7 +87,7 @@ impl Firefly {
         let rand_factor = Math::random() as f32;
         let state = State {
             phase: rand_factor * 2.0 * std::f32::consts::PI,
-            frequency: 0.03 + rand_factor * 0.01,
+            frequency: 0.03 + rand_factor * 0.005,
         };
         let firefly = Firefly {
             position: Position { x, y },
