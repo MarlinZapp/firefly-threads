@@ -21,7 +21,7 @@ extern "C" {
 }
 
 static mut GRID_STATE: Option<Vec<Vec<Firefly>>> = None;
-const COUPLING_STRENGTH: f32 = 0.02;
+const COUPLING_STRENGTH: f32 = 0.01;
 
 #[derive(Clone, Copy, Debug)]
 struct State {
@@ -65,11 +65,9 @@ impl Firefly {
     // Method to create a new firefly
     fn new(x: usize, y: usize) -> Self {
         let rand_factor_phase = Math::random() as f32;
-        let rand_factor_frequency = Math::random() as f32;
         let state = State {
             phase: rand_factor_phase * 2.0 * std::f32::consts::PI,
-            /** times 0.005 because else the refresh rate is way to fast */
-            frequency: rand_factor_frequency * 2. * std::f32::consts::PI * 0.005,
+            frequency: std::f32::consts::PI * 0.01,
         };
         let firefly = Firefly {
             position: Position { x, y },
