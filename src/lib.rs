@@ -1,7 +1,6 @@
 mod utils;
 
 use js_sys::Math;
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use wasm_bindgen::prelude::*;
@@ -22,7 +21,7 @@ extern "C" {
 }
 
 static mut GRID_STATE: Option<Vec<Vec<Firefly>>> = None;
-const coupling_strength: f32 = 0.01;
+const COUPLING_STRENGTH: f32 = 0.02;
 
 #[derive(Clone, Copy, Debug)]
 struct State {
@@ -40,23 +39,6 @@ struct Position {
 struct Firefly {
     position: Position,
     state: Arc<Mutex<State>>,
-    channel: (Sender<Message>, Arc<Mutex<Receiver<Message>>>),
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Message {
-    /** Request from firefly at the given position to send the state information */
-    StateRequest(Position),
-    /** Response from firefly at the given position with the state information */
-    StateResponse(State),
-}
-
-fn get_random_index(n: usize) -> usize {
-    // Generates a random floating-point number between 0.0 (inclusive) and 1.0 (exclusive)
-    let random_float = Math::random();
-
-    // Scale to the range [0, n) and convert to u32 for an integer index
-    (random_float * n as f64).floor() as usize
 }
 
 #[wasm_bindgen]
@@ -82,17 +64,16 @@ pub fn get_grid_row(i: usize) -> Vec<u8> {
 impl Firefly {
     // Method to create a new firefly
     fn new(x: usize, y: usize) -> Self {
-        let channel = mpsc::channel();
-        let channel = (channel.0, Arc::new(Mutex::new(channel.1)));
-        let rand_factor = Math::random() as f32;
+        let rand_factor_phase = Math::random() as f32;
+        let rand_factor_frequency = Math::random() as f32;
         let state = State {
-            phase: rand_factor * 2.0 * std::f32::consts::PI,
-            frequency: 0.03 + rand_factor * 0.005,
+            phase: rand_factor_phase * 2.0 * std::f32::consts::PI,
+            /** times 0.005 because else the refresh rate is way to fast */
+            frequency: rand_factor_frequency * 2. * std::f32::consts::PI * 0.005,
         };
         let firefly = Firefly {
             position: Position { x, y },
             state: Arc::new(Mutex::new(state)),
-            channel,
         };
         firefly
     }
@@ -127,7 +108,7 @@ impl Firefly {
             })
             .sum();
         let phase_tick = last_state.frequency
-            + (coupling_strength / neighbors.len() as f32) * neighbor_phase_difference;
+            + (COUPLING_STRENGTH / neighbors.len() as f32) * neighbor_phase_difference;
         let total_phase = 2.0 * std::f32::consts::PI;
         {
             let mut state = state.lock().unwrap();
@@ -143,9 +124,9 @@ impl Firefly {
             if let Some(fireflies) = &GRID_STATE {
                 let rows = fireflies.len();
                 let cols = fireflies[0].len();
-                let up = &fireflies[(y - 1) % rows][x];
+                let up = &fireflies[(y + rows - 1) % rows][x];
                 let down = &fireflies[(y + 1) % rows][x];
-                let left = &fireflies[y][(x - 1) % cols];
+                let left = &fireflies[y][(x + cols - 1) % cols];
                 let right = &fireflies[y][(x + 1) % cols];
                 let neighbours = vec![up, down, left, right];
                 return Some(neighbours);
